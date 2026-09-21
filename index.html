@@ -226,7 +226,7 @@ async function loadIdentifier() {
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
     
     // On utilise l'URL absolue complète pour éviter toute confusion de dossier
-    const modelUrl = 'TON_LIEN_DIRECT_ICI'; 
+    const modelUrl = 'https://thomaspls.github.io/Vigie/modele_3_voitures.onnx'; 
     
     ortSession = await ort.InferenceSession.create(modelUrl, { executionProviders: ['wasm'] });
     idReady = true;
