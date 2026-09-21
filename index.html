@@ -222,6 +222,10 @@ async function requestWake() {
 async function loadIdentifier() {
   try {
     setIdStatus('chargement du modèle 3 véhicules…');
+    
+    // Force ONNX à charger ses moteurs depuis le serveur officiel
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
+    
     ortSession = await ort.InferenceSession.create('./modele_3_voitures.onnx', { executionProviders: ['wasm'] });
     idReady = true;
     setIdStatus('prête');
