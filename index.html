@@ -221,18 +221,21 @@ async function requestWake() {
    ===================================================================== */
 async function loadIdentifier() {
   try {
-    setIdStatus('chargement du modèle 3 véhicules…');
+    setIdStatus('chargement du modèle…');
     
-    // Force ONNX à charger ses moteurs depuis le serveur officiel
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
     
-    ortSession = await ort.InferenceSession.create('./modele_3_voitures.onnx', { executionProviders: ['wasm'] });
+    // On utilise l'URL absolue complète pour éviter toute confusion de dossier
+    const modelUrl = 'TON_LIEN_DIRECT_ICI'; 
+    
+    ortSession = await ort.InferenceSession.create(modelUrl, { executionProviders: ['wasm'] });
     idReady = true;
     setIdStatus('prête');
   } catch (e) {
     console.error(e);
-    setIdStatus('indisponible');
-    showToast("Le modèle ONNX n'a pas pu se charger.");
+    setIdStatus('Erreur');
+    // Cette ligne va afficher la véritable erreur technique en bas de ton écran !
+    showToast("Erreur détaillée : " + e.message);
   }
 }
 
