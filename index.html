@@ -146,7 +146,7 @@
 /* =====================================================================
    1. CLASSES PERSONNALISÉES
    ===================================================================== */
-const MES_3_VEHICULES = ["Citroën C3 II", "Peugeot 208 II", "Renault Clio IV"]; // À remplacer par les noms de vos dossiers
+const MES_3_VEHICULES = ["Citroen C3 I", "Citroen C3 II", "Citroën C3 III", "Peugeot 208 II", "Renault Clio IV"]; // À remplacer par les noms de vos dossiers
 
 /* =====================================================================
    2. ÉLÉMENTS ET ÉTAT
@@ -221,21 +221,14 @@ async function requestWake() {
    ===================================================================== */
 async function loadIdentifier() {
   try {
-    setIdStatus('chargement du modèle…');
-    
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
-    
-    // On utilise l'URL absolue complète pour éviter toute confusion de dossier
-    const modelUrl = 'https://thomaspls.github.io/Vigie/modele_3_voitures.onnx'; 
-    
-    ortSession = await ort.InferenceSession.create(modelUrl, { executionProviders: ['wasm'] });
+    setIdStatus('chargement du modèle 3 véhicules…');
+    ortSession = await ort.InferenceSession.create('./modele_3_voitures.onnx', { executionProviders: ['wasm'] });
     idReady = true;
     setIdStatus('prête');
   } catch (e) {
     console.error(e);
-    setIdStatus('Erreur');
-    // Cette ligne va afficher la véritable erreur technique en bas de ton écran !
-    showToast("Erreur détaillée : " + e.message);
+    setIdStatus('indisponible');
+    showToast("Le modèle ONNX n'a pas pu se charger.");
   }
 }
 
