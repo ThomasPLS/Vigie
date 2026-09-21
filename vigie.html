@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1113">
+<title>Vigie – Identification de véhicules</title>
+<style>
+  :root{
+    --ink:#0f1113;
+    --ink-2:#1b1e21;
+    --paper:#f3f1ec;
+    --mute:#a4a8ab;
+    --signal:#ffb000;
+    --danger:#ff7a6b;
+  }
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%;background:var(--ink);color:var(--paper);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{overflow:hidden}
+  button{font:inherit;color:inherit}
+  :focus-visible{outline:3px solid var(--signal);outline-offset:2px}
+
+  /* ---------- Écran d'accueil ---------- */
+  .start{position:fixed;inset:0;z-index:5;display:grid;place-items:center;padding:1.5rem;background:var(--ink)}
+  .start[hidden]{display:none}
+  .start-inner{max-width:26rem;width:100%}
+  .frame{position:relative;padding:2.25rem 1.75rem}
+  .frame::before,.frame::after{content:"";position:absolute;width:34px;height:34px;border:4px solid var(--signal)}
+  .frame::before{top:0;left:0;border-right:0;border-bottom:0}
+  .frame::after{bottom:0;right:0;border-left:0;border-top:0}
+  h1{font-size:2.75rem;font-weight:700;letter-spacing:-.02em;line-height:1}
+  .lead{margin-top:1rem;font-size:1.05rem;line-height:1.5;color:#dcdad4}
+  .note{margin-top:1rem;font-size:.9rem;line-height:1.45;color:var(--mute)}
+  .go{margin-top:1.75rem;width:100%;padding:1rem 1.25rem;border:0;border-radius:12px;
+    background:var(--signal);color:#1a1200;font-weight:700;font-size:1.05rem;cursor:pointer}
+  .go:disabled{opacity:.6;cursor:progress}
+  .msg{margin-top:1rem;min-height:1.4em;font-size:.95rem;line-height:1.4;color:var(--paper)}
+  .msg.err{color:var(--danger)}
+
+  /* ---------- Vue caméra ---------- */
+  .stage{position:fixed;inset:0}
+  video,canvas{position:absolute;inset:0;width:100%;height:100%}
+  video{object-fit:cover;background:#000}
+  canvas{pointer-events:none}
+
+  .hud{position:absolute;left:0;right:0;top:0;z-index:2;display:flex;justify-content:space-between;align-items:flex-start;
+    padding:calc(env(safe-area-inset-top) + .9rem) 1rem 2.5rem;
+    background:linear-gradient(to bottom,rgba(0,0,0,.6),rgba(0,0,0,0));pointer-events:none}
+  .brand{font-weight:700;font-size:1.05rem}
+  .status{margin-top:.25rem;display:flex;align-items:center;gap:.45rem;font-size:.85rem;color:#e6e4de}
+  .dot{width:.6rem;height:.6rem;border-radius:50%;background:var(--signal)}
+  .dot.off{background:var(--mute)}
+  .counter{text-align:right}
+  .counter b{display:block;font-size:3.5rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+  .counter span{font-size:.9rem;color:#e6e4de}
+
+  .dock{position:absolute;z-index:2;left:.75rem;right:.75rem;bottom:calc(env(safe-area-inset-bottom) + .75rem);
+    display:flex;flex-direction:column;gap:.6rem}
+  .card{padding:.8rem 1rem;border-left:5px solid var(--signal);border-radius:12px;
+    background:rgba(15,17,19,.84);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+  .card[hidden]{display:none}
+  .card .make{font-size:1.6rem;font-weight:700;line-height:1.15}
+  .card .model{margin-top:.15rem;font-size:1.15rem;font-weight:600;color:#fff0cf}
+  .card .meta{margin-top:.35rem;font-size:.85rem;color:#dcdad4}
+  .card .alt{margin-top:.2rem;font-size:.8rem;color:var(--mute);line-height:1.35}
+
+  .bar{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem 1rem;padding:.75rem .9rem;
+    background:rgba(15,17,19,.78);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:16px}
+  .thresh{flex:1 1 11rem;display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;color:#dcdad4}
+  .thresh div{display:flex;justify-content:space-between}
+  input[type=range]{width:100%;accent-color:var(--signal)}
+  .btns{display:flex;gap:.5rem;margin-left:auto}
+  .btn{display:inline-flex;align-items:center;gap:.4rem;padding:.65rem .9rem;border:1px solid #3a3f44;
+    border-radius:10px;background:var(--ink-2);cursor:pointer;font-size:.9rem}
+  .btn svg{width:1.1rem;height:1.1rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .btn[aria-pressed=true]{background:var(--signal);border-color:var(--signal);color:#1a1200}
+  .toast{position:absolute;z-index:3;left:50%;top:50%;transform:translate(-50%,-50%);max-width:80%;
+    padding:.8rem 1rem;border-radius:12px;background:rgba(15,17,19,.88);text-align:center;font-size:.95rem}
+  .toast[hidden]{display:none}
+</style>
+</head>
+<body>
+
+<section class="start" id="start">
+  <div class="start-inner">
+    <div class="frame">
+      <h1>Vigie</h1>
+      <p class="lead">Pointe la caméra vers une voiture : Vigie la repère, puis estime sa marque et son modèle. Touche une voiture pour la choisir.</p>
+      <p class="note">Modèle personnalisé entraîné sur 3 véhicules.</p>
+      <button class="go" id="goBtn" type="button">Activer la caméra</button>
+      <p class="msg" id="msg" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+</section>
+
+<main class="stage" id="stage">
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="overlay"></canvas>
+
+  <div class="hud">
+    <div>
+      <div class="brand">Vigie</div>
+      <div class="status"><span class="dot off" id="dot"></span><span id="statusTxt">En attente</span></div>
+      <div class="status"><span id="idTxt">Identification : en attente</span></div>
+    </div>
+    <div class="counter">
+      <b id="count">0</b>
+      <span id="countLbl">véhicule</span>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <div class="dock">
+    <div class="card" id="card" hidden aria-live="polite">
+      <div class="make" id="cardMake"></div>
+      <div class="model" id="cardModel"></div>
+      <div class="meta" id="cardMeta"></div>
+      <div class="alt" id="cardAlt"></div>
+    </div>
+    <div class="bar">
+      <label class="thresh" for="thresh">
+        <div><span>Sensibilité minimale</span><span id="threshVal">50 %</span></div>
+        <input id="thresh" type="range" min="30" max="90" step="5" value="50">
+      </label>
+      <div class="btns">
+        <button class="btn" id="flipBtn" type="button" aria-label="Changer de caméra">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7h-3l-2-2H9L7 7H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1z"/><path d="M9 13a3 3 0 0 1 5-2M15 13a3 3 0 0 1-5 2"/></svg>
+          Caméra
+        </button>
+        <button class="btn" id="pauseBtn" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
+          <span id="pauseTxt">Pause</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+
+<script type="module">
+/* =====================================================================
+   1. CLASSES PERSONNALISÉES
+   ===================================================================== */
+const MES_3_VEHICULES = ["Citroën C3 II", "Peugeot 208 II", "Renault Clio IV"]; // À remplacer par les noms de vos dossiers
+
+/* =====================================================================
+   2. ÉLÉMENTS ET ÉTAT
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const stage = $('stage'), video = $('video'), canvas = $('overlay'), ctx = canvas.getContext('2d');
+const startEl = $('start'), goBtn = $('goBtn'), msgEl = $('msg');
+const countEl = $('count'), countLbl = $('countLbl');
+const dot = $('dot'), statusTxt = $('statusTxt'), idTxt = $('idTxt'), toast = $('toast');
+const thresh = $('thresh'), threshVal = $('threshVal');
+const pauseBtn = $('pauseBtn'), pauseTxt = $('pauseTxt'), flipBtn = $('flipBtn');
+const card = $('card'), cardMake = $('cardMake'), cardModel = $('cardModel'), cardMeta = $('cardMeta'), cardAlt = $('cardAlt');
+
+const LABELS_FR = { car: 'Voiture', truck: 'Camion', bus: 'Bus', motorcycle: 'Moto' };
+const SIGNAL = '#ffb000', WHITE = '#f3f1ec';
+
+let model = null, stream = null, facing = 'environment';
+let running = false, paused = false, busy = false;
+let preds = [], fps = 0, wakeLock = null;
+
+// identification
+let idReady = false, idBusy = false, lastIdent = 0, lastTargetSeen = 0;
+let ortSession = null;
+let track = null;
+let pinned = false, targetBox = null;
+const cropCv = document.createElement('canvas'); cropCv.width = cropCv.height = 224;
+
+/* =====================================================================
+   3. UTILITAIRES
+   ===================================================================== */
+const area = b => b[2] * b[3];
+function iou(a, b) {
+  const x1 = Math.max(a[0], b[0]), y1 = Math.max(a[1], b[1]);
+  const x2 = Math.min(a[0] + a[2], b[0] + b[2]), y2 = Math.min(a[1] + a[3], b[1] + b[3]);
+  const i = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const u = a[2] * a[3] + b[2] * b[3] - i;
+  return u > 0 ? i / u : 0;
+}
+function setMsg(text, isErr) { msgEl.textContent = text || ''; msgEl.classList.toggle('err', !!isErr); }
+function showToast(text) { toast.textContent = text; toast.hidden = false; setTimeout(() => toast.hidden = true, 2500); }
+function setIdStatus(t) { idTxt.textContent = 'Identification : ' + t; }
+
+function explain(e) {
+  switch (e && e.name) {
+    case 'InsecureContext': return "La caméra exige une page en HTTPS (ou localhost).";
+    case 'NotAllowedError': return "Accès à la caméra refusé. Autorise-le dans les réglages du navigateur, puis réessaie.";
+    case 'NotFoundError': return "Aucune caméra trouvée sur cet appareil.";
+    case 'NotReadableError': return "La caméra est utilisée par une autre application.";
+    default: return "Erreur : " + (e && e.message ? e.message : 'inconnue');
+  }
+}
+
+function stopStream() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
+
+async function openCamera() {
+  stopStream();
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }
+  });
+  video.srcObject = stream;
+  await new Promise(res => video.readyState >= 1 ? res() : video.addEventListener('loadedmetadata', res, { once: true }));
+  await video.play();
+}
+
+async function requestWake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+}
+
+/* =====================================================================
+   4. IDENTIFICATION ONNX
+   ===================================================================== */
+async function loadIdentifier() {
+  try {
+    setIdStatus('chargement du modèle 3 véhicules…');
+    ortSession = await ort.InferenceSession.create('./modele_3_voitures.onnx', { executionProviders: ['wasm'] });
+    idReady = true;
+    setIdStatus('prête');
+  } catch (e) {
+    console.error(e);
+    setIdStatus('indisponible');
+    showToast("Le modèle ONNX n'a pas pu se charger.");
+  }
+}
+
+function cropToCanvas(bbox) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const [x, y, w, h] = bbox, pad = 0.06;
+  const sx = Math.max(0, x - w * pad), sy = Math.max(0, y - h * pad);
+  const ex = Math.min(vw, x + w * (1 + pad)), ey = Math.min(vh, y + h * (1 + pad));
+  const sw = ex - sx, sh = ey - sy, side = Math.max(sw, sh);
+  const c = cropCv.getContext('2d');
+  c.fillStyle = '#808080';
+  c.fillRect(0, 0, 224, 224);
+  const k = 224 / side, dw = sw * k, dh = sh * k;
+  c.drawImage(video, sx, sy, sw, sh, (224 - dw) / 2, (224 - dh) / 2, dw, dh);
+  return cropCv;
+}
+
+function renderCardMsg(title, sub) {
+  card.hidden = false;
+  cardMake.textContent = title; cardModel.textContent = sub || ''; cardMeta.textContent = ''; cardAlt.textContent = '';
+}
+
+async function identify(target, now) {
+  idBusy = true; lastIdent = now;
+  try {
+    const cv = cropToCanvas(target.bbox);
+    const imgData = cv.getContext('2d').getImageData(0, 0, 224, 224).data;
+    const float32Data = new Float32Array(3 * 224 * 224);
+    const mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225];
+    
+    for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
+        float32Data[j] = ((imgData[i] / 255.0) - mean[0]) / std[0];
+        float32Data[224 * 224 + j] = ((imgData[i + 1] / 255.0) - mean[1]) / std[1];
+        float32Data[2 * 224 * 224 + j] = ((imgData[i + 2] / 255.0) - mean[2]) / std[2];
+    }
+    
+    const tensor = new ort.Tensor('float32', float32Data, [1, 3, 224, 224]);
+    const results = await ortSession.run({ 'input': tensor });
+    
+    // Assurez-vous que la clé 'output' correspond à l'output_names défini dans le script Python d'exportation
+    const logits = results.output ? results.output.data : Object.values(results)[0].data;
+
+    const maxLogit = Math.max(...logits);
+    const expLogits = logits.map(x => Math.exp(x - maxLogit));
+    const sumExp = expLogits.reduce((a, b) => a + b);
+    const probs = expLogits.map(x => x / sumExp);
+
+    let bestIdx = 0;
+    for (let i = 1; i < probs.length; i++) {
+        if (probs[i] > probs[bestIdx]) bestIdx = i;
+    }
+
+    const bestProb = probs[bestIdx];
+    const bestName = MES_3_VEHICULES[bestIdx];
+
+    track = { bbox: target.bbox.slice(), prob: bestProb, name: bestName, t: performance.now() };
+
+    card.hidden = false;
+    cardMake.textContent = bestName;
+    cardModel.textContent = "";
+    cardMeta.textContent = "Confiance : " + Math.round(bestProb * 100) + " %";
+    cardAlt.textContent = "";
+    
+    draw();
+  } catch (e) { console.error(e); }
+  idBusy = false;
+}
+
+function pickTarget(cars) {
+  if (!cars.length) return null;
+  if (pinned && targetBox) {
+    let best = null, bi = 0.2;
+    for (const c of cars) { const i = iou(targetBox, c.bbox); if (i > bi) { bi = i; best = c; } }
+    if (best) return best;
+    pinned = false;
+  }
+  return cars.reduce((a, b) => area(b.bbox) > area(a.bbox) ? b : a);
+}
+
+function afterDetect(now) {
+  const cars = preds.filter(p => p.class === 'car');
+  const target = pickTarget(cars);
+  targetBox = target ? target.bbox : null;
+  if (!target) {
+    if (now - lastTargetSeen > 2000) card.hidden = true;
+    return;
+  }
+  lastTargetSeen = now;
+  if (!idReady) return;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const tooSmall = Math.min(target.bbox[2], target.bbox[3]) < 90 || area(target.bbox) / (vw * vh) < 0.03;
+  if (tooSmall) { renderCardMsg('Trop loin', 'Rapproche-toi de la voiture'); return; }
+  if (!idBusy && now - lastIdent > 800) identify(target, now);
+}
+
+function labelFor(p) {
+  if (p.class === 'car' && track && iou(track.bbox, p.bbox) > 0.4) {
+    return track.name + ' ' + Math.round(track.prob * 100) + ' %';
+  }
+  return LABELS_FR[p.class] + ' ' + Math.round(p.score * 100) + ' %';
+}
+
+/* =====================================================================
+   5. DÉMARRAGE ET BOUCLE DE DÉTECTION
+   ===================================================================== */
+async function start() {
+  goBtn.disabled = true;
+  setMsg('Chargement du détecteur et de la caméra…');
+  try {
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw Object.assign(new Error('insecure'), { name: 'InsecureContext' });
+    }
+    if (!window.cocoSsd) throw Object.assign(new Error('lib'), { name: 'LibError' });
+    const loadModel = model ? Promise.resolve(model)
+      : window.cocoSsd.load({ base: 'lite_mobilenet_v2' })
+          .catch(() => { throw Object.assign(new Error('model'), { name: 'ModelError' }); });
+    const [, m] = await Promise.all([openCamera(), loadModel]);
+    model = m;
+  } catch (e) {
+    stopStream();
+    goBtn.disabled = false;
+    setMsg(explain(e), true);
+    return;
+  }
+  startEl.hidden = true;
+  running = true;
+  dot.classList.remove('off');
+  statusTxt.textContent = 'En direct';
+  requestWake();
+  requestAnimationFrame(loop);
+  loadIdentifier();
+}
+
+async function loop() {
+  if (!running) return;
+  if (!paused && !busy && video.readyState >= 2) {
+    busy = true;
+    const t0 = performance.now();
+    try {
+      const all = await model.detect(video, 20, thresh.value / 100);
+      preds = all.filter(p => LABELS_FR[p.class]);
+      const dt = performance.now() - t0;
+      fps = fps ? fps * 0.8 + (1000 / dt) * 0.2 : 1000 / dt;
+      statusTxt.textContent = 'En direct, ' + Math.round(fps) + ' im/s';
+      countEl.textContent = preds.length;
+      countLbl.textContent = preds.length === 1 ? 'véhicule' : 'véhicules';
+      afterDetect(performance.now());
+      draw();
+    } catch (_) {}
+    busy = false;
+  }
+  requestAnimationFrame(loop);
+}
+
+/* =====================================================================
+   6. DESSIN
+   ===================================================================== */
+function coverMap() {
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return null;
+  const s = Math.max(cw / vw, ch / vh);
+  return { cw, ch, s, ox: (cw - vw * s) / 2, oy: (ch - vh * s) / 2 };
+}
+function fitCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function draw() {
+  fitCanvas();
+  const m = coverMap();
+  ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+  if (!m) return;
+  ctx.lineCap = 'round';
+  ctx.font = '600 14px ui-sans-serif, system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+
+  for (const p of preds) {
+    const [bx, by, bw, bh] = p.bbox;
+    const x = bx * m.s + m.ox, y = by * m.s + m.oy, w = bw * m.s, h = bh * m.s;
+    const col = p.class === 'car' ? SIGNAL : WHITE;
+    const isTarget = targetBox && p.bbox === targetBox;
+    const L = Math.max(12, Math.min(30, Math.min(w, h) * 0.25));
+
+    ctx.lineWidth = isTarget ? 4 : 2.5;
+    ctx.strokeStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x, y + L); ctx.lineTo(x, y); ctx.lineTo(x + L, y);
+    ctx.moveTo(x + w - L, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + L);
+    ctx.moveTo(x + w, y + h - L); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - L, y + h);
+    ctx.moveTo(x + L, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - L);
+    ctx.stroke();
+
+    const text = labelFor(p);
+    const tw = ctx.measureText(text).width + 14, th = 24;
+    const ty = y - th - 4 >= 0 ? y - th - 4 : y + 4;
+    ctx.fillStyle = col;
+    ctx.fillRect(x, ty, tw, th);
+    ctx.fillStyle = '#1a1200';
+    ctx.fillText(text, x + 7, ty + th / 2 + 1);
+  }
+}
+
+/* =====================================================================
+   7. CONTRÔLES
+   ===================================================================== */
+goBtn.addEventListener('click', start);
+thresh.addEventListener('input', () => { threshVal.textContent = thresh.value + ' %'; });
+
+stage.addEventListener('click', ev => {
+  if (!running || ev.target.closest('.dock')) return;
+  const m = coverMap();
+  if (!m) return;
+  const r = canvas.getBoundingClientRect();
+  const vx = (ev.clientX - r.left - m.ox) / m.s, vy = (ev.clientY - r.top - m.oy) / m.s;
+  const hits = preds.filter(p => p.class === 'car' &&
+    vx >= p.bbox[0] && vx <= p.bbox[0] + p.bbox[2] && vy >= p.bbox[1] && vy <= p.bbox[1] + p.bbox[3])
+    .sort((a, b) => area(a.bbox) - area(b.bbox));
+  if (hits.length) {
+    pinned = true; targetBox = hits[0].bbox; track = null; lastIdent = 0;
+    showToast('Voiture sélectionnée');
+    afterDetect(performance.now()); draw();
+  } else {
+    pinned = false;
+  }
+});
+
+pauseBtn.addEventListener('click', () => {
+  paused = !paused;
+  pauseBtn.setAttribute('aria-pressed', paused);
+  pauseTxt.textContent = paused ? 'Reprendre' : 'Pause';
+  if (paused) { video.pause(); dot.classList.add('off'); statusTxt.textContent = 'En pause'; }
+  else { video.play(); dot.classList.remove('off'); statusTxt.textContent = 'En direct'; }
+});
+
+flipBtn.addEventListener('click', async () => {
+  const prev = facing;
+  facing = facing === 'environment' ? 'user' : 'environment';
+  preds = []; track = null; pinned = false; targetBox = null; card.hidden = true;
+  countEl.textContent = '0'; draw();
+  try {
+    await openCamera();
+    paused = false; pauseBtn.setAttribute('aria-pressed', false); pauseTxt.textContent = 'Pause';
+  } catch (e) {
+    facing = prev;
+    try { await openCamera(); } catch (_) {}
+    showToast('Impossible de changer de caméra.');
+  }
+});
+
+window.addEventListener('resize', draw);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && running) requestWake();
+});
+</script>
+</body>
+</html>
