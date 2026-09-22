@@ -172,7 +172,7 @@ let idReady = false, idBusy = false, lastIdent = 0, lastTargetSeen = 0;
 let ortSession = null;
 let track = null;
 let pinned = false, targetBox = null;
-const cropCv = document.createElement('canvas'); cropCv.width = cropCv.height = 224;
+const cropCv = document.createElement('canvas'); cropCv.width = cropCv.height = 260;
 
 /* =====================================================================
    3. UTILITAIRES
@@ -222,7 +222,7 @@ async function requestWake() {
 async function loadIdentifier() {
   try {
     setIdStatus('chargement du modèle 3 véhicules…');
-    ortSession = await ort.InferenceSession.create('./modele_3_voitures.onnx', { executionProviders: ['wasm'] });
+    ortSession = await ort.InferenceSession.create('./modele_voitures_b2_leger.onnx', { executionProviders: ['wasm'] });
     idReady = true;
     setIdStatus('prête');
   } catch (e) {
@@ -240,9 +240,9 @@ function cropToCanvas(bbox) {
   const sw = ex - sx, sh = ey - sy, side = Math.max(sw, sh);
   const c = cropCv.getContext('2d');
   c.fillStyle = '#808080';
-  c.fillRect(0, 0, 224, 224);
-  const k = 224 / side, dw = sw * k, dh = sh * k;
-  c.drawImage(video, sx, sy, sw, sh, (224 - dw) / 2, (224 - dh) / 2, dw, dh);
+  c.fillRect(0, 0, 260, 260);
+  const k = 260 / side, dw = sw * k, dh = sh * k;
+  c.drawImage(video, sx, sy, sw, sh, (260 - dw) / 2, (260 - dh) / 2, dw, dh);
   return cropCv;
 }
 
@@ -255,17 +255,17 @@ async function identify(target, now) {
   idBusy = true; lastIdent = now;
   try {
     const cv = cropToCanvas(target.bbox);
-    const imgData = cv.getContext('2d').getImageData(0, 0, 224, 224).data;
-    const float32Data = new Float32Array(3 * 224 * 224);
-    const mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225];
+    const imgData = cv.getContext('2d').getImageData(0, 0, 260, 260).data;
+    const float32Data = new Float32Array(3 * 260 * 260);
+    const mean = [0.485, 0.456, 0.406], std = [0.229, 0.260, 0.225];
     
     for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
         float32Data[j] = ((imgData[i] / 255.0) - mean[0]) / std[0];
-        float32Data[224 * 224 + j] = ((imgData[i + 1] / 255.0) - mean[1]) / std[1];
-        float32Data[2 * 224 * 224 + j] = ((imgData[i + 2] / 255.0) - mean[2]) / std[2];
+        float32Data[260 * 260 + j] = ((imgData[i + 1] / 255.0) - mean[1]) / std[1];
+        float32Data[2 * 260 * 260 + j] = ((imgData[i + 2] / 255.0) - mean[2]) / std[2];
     }
     
-    const tensor = new ort.Tensor('float32', float32Data, [1, 3, 224, 224]);
+    const tensor = new ort.Tensor('float32', float32Data, [1, 3, 260, 260]);
     const results = await ortSession.run({ 'input': tensor });
     
     // Assurez-vous que la clé 'output' correspond à l'output_names défini dans le script Python d'exportation
